@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.state/
+
+# Context files (project-specific, not shared) — keep only the template
+context/*
+!context/_template.md
