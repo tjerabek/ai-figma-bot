@@ -1,61 +1,68 @@
 import { FigmaClient } from "./client.js";
 import type { FigmaCommentsResponse, FigmaComment, PendingComment } from "./types.js";
-import type { StateManager } from "../state/answered.js";
 import { logger } from "../utils/logger.js";
 
+/** Emoji shortcodes used by the bot as reaction markers. */
+export const PROGRESS_EMOJI = ":eyes:";
+export const DONE_EMOJI = ":robot_face:";
+
 /**
- * Fetch all unresolved comments that match the trigger prefix and haven't been answered yet.
+ * Fetch all unresolved comments that match the trigger prefix and need answering.
  *
- * Filtering pipeline:
- *   1. Skip child comments (replies)
- *   2. Skip resolved threads
- *   3. Skip comments already tracked in local state
- *   4. Skip (and sync state for) comments that already have a bot reply in Figma
- *   5. Parse the trigger prefix — skip comments that don't match or have no question
+ * Dedup is based solely on Figma reactions:
+ *   - 🤖 (:robot_face:) → already answered, skip
+ *   - 👀 (:eyes:)       → currently being processed, skip
  */
 export async function fetchPendingComments(
   client: FigmaClient,
   fileKey: string,
-  triggerPrefix: string,
-  replyTemplate: string,
-  state: StateManager
+  triggerPrefix: string
 ): Promise<PendingComment[]> {
   const res = await client.get<FigmaCommentsResponse>(
     `/v1/files/${fileKey}/comments`
   );
 
+  // Debug: log all comments so we can see the raw data
+  for (const c of res.comments) {
+    const reactions = (c.reactions ?? []).map((r) => r.emoji).join(", ");
+    logger.debug(
+      `  comment ${c.id} | parent="${c.parent_id}" | resolved=${!!c.resolved_at} | reactions=[${reactions}] | msg="${c.message.slice(0, 60)}"`
+    );
+  }
+
   logger.info(`Fetched ${res.comments.length} comments from Figma API`);
 
-  // Derive the bot reply prefix from the actual reply template,
-  // so we recognise our own replies even if the template is customised.
-  const botReplyPrefix = replyTemplate
-    .replace("{{prefix}}", triggerPrefix)
-    .split("{{answer}}")[0]
-    .trim()
-    .toLowerCase();
-
-  // Build a set of parent IDs that already have a bot reply
-  const answeredByReply = new Set<string>();
+  // Build set of comment IDs that already have replies (any child comment)
+  const hasReply = new Set<string>();
   for (const comment of res.comments) {
-    if (!comment.parent_id) continue;
-    const msgLower = comment.message.trim().toLowerCase();
-    if (msgLower.startsWith(botReplyPrefix)) {
-      answeredByReply.add(comment.parent_id);
+    if (comment.parent_id) {
+      hasReply.add(comment.parent_id);
     }
   }
+  logger.debug(`Comments with replies: [${[...hasReply].join(", ")}]`);
 
   const prefixLower = triggerPrefix.toLowerCase();
   const pending: PendingComment[] = [];
 
   for (const comment of res.comments) {
+    // Skip child comments (replies)
     if (comment.parent_id) continue;
     if (comment.resolved_at) continue;
-    if (state.isAnswered(comment.id)) continue;
 
-    // Sync local state if a bot reply already exists in Figma
-    if (answeredByReply.has(comment.id)) {
-      logger.info(`Comment ${comment.id} already has a bot reply — syncing state`);
-      state.markAnswered(comment.id);
+    // Reaction-based dedup
+    const reactions = comment.reactions ?? [];
+    if (reactions.some((r) => r.emoji === DONE_EMOJI)) {
+      logger.debug(`  skip ${comment.id}: has 🤖 done reaction`);
+      continue;
+    }
+    if (reactions.some((r) => r.emoji === PROGRESS_EMOJI)) {
+      logger.debug(`  skip ${comment.id}: has 👀 progress reaction`);
+      continue;
+    }
+
+    // Skip comments that already have any reply in the thread
+    if (hasReply.has(comment.id)) {
+      logger.debug(`  skip ${comment.id}: already has reply`);
       continue;
     }
 

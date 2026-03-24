@@ -1,4 +1,4 @@
-type Level = "INFO" | "WARN" | "ERROR";
+type Level = "DEBUG" | "INFO" | "WARN" | "ERROR";
 
 function timestamp(): string {
   return new Date().toISOString();
@@ -27,7 +27,12 @@ function log(level: Level, message: string, data?: unknown): void {
   }
 }
 
+const DEBUG_ENABLED = process.env.DEBUG === "1" || process.env.DEBUG === "true";
+
 export const logger = {
+  debug: (message: string, data?: unknown) => {
+    if (DEBUG_ENABLED) log("DEBUG", message, data);
+  },
   info: (message: string, data?: unknown) => log("INFO", message, data),
   warn: (message: string, data?: unknown) => log("WARN", message, data),
   error: (message: string, data?: unknown) => log("ERROR", message, data),

@@ -3,7 +3,6 @@ import { fetchPendingComments } from "../figma/comments.js";
 import { handleComment } from "./handler.js";
 import type { AIClient } from "../ai/index.js";
 import type { Config } from "../config.js";
-import type { StateManager } from "../state/answered.js";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -14,13 +13,11 @@ import { logger } from "../utils/logger.js";
  */
 export async function startPolling(
   config: Config,
-  ai: AIClient,
-  state: StateManager
+  ai: AIClient
 ): Promise<void> {
   const figma = new FigmaClient(config.figmaToken, config.maxApiRetries);
   const abortController = new AbortController();
 
-  // Register shutdown handlers once
   const shutdown = () => {
     logger.info("Shutting down...");
     abortController.abort();
@@ -39,26 +36,22 @@ export async function startPolling(
       const comments = await fetchPendingComments(
         figma,
         config.figmaFileKey,
-        config.triggerPrefix,
-        config.replyTemplate,
-        state
+        config.triggerPrefix
       );
 
       for (const comment of comments) {
         if (abortController.signal.aborted) break;
-        await handleComment(comment, figma, ai, config, state);
+        await handleComment(comment, figma, ai, config);
       }
     } catch (err) {
       logger.error("Polling cycle error", err);
     }
 
-    // Sleep until next poll, or until aborted
     if (!abortController.signal.aborted) {
       await sleep(config.pollingIntervalMs, abortController.signal);
     }
   }
 
-  // Clean up listeners
   process.off("SIGINT", shutdown);
   process.off("SIGTERM", shutdown);
 

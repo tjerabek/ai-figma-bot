@@ -24,6 +24,10 @@ export class FigmaClient {
     return this.request<T>("POST", endpoint, body);
   }
 
+  async delete<T>(endpoint: string): Promise<T> {
+    return this.request<T>("DELETE", endpoint);
+  }
+
   private async request<T>(
     method: string,
     endpoint: string,

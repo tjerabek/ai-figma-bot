@@ -24,6 +24,12 @@ export interface FrameOffsetRegion {
 
 export type ClientMeta = Vector | FrameOffset | FrameOffsetRegion;
 
+export interface FigmaReaction {
+  emoji: string;
+  user: FigmaUser;
+  created_at: string;
+}
+
 export interface FigmaComment {
   id: string;
   message: string;
@@ -34,6 +40,7 @@ export interface FigmaComment {
   resolved_at: string | null;
   client_meta: ClientMeta;
   order_id: string;
+  reactions: FigmaReaction[];
 }
 
 export interface FigmaCommentsResponse {

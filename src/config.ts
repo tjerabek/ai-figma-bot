@@ -31,8 +31,6 @@ export interface Config {
   prompt: PromptConfig;
   /** Reply template posted to Figma. Supports {{prefix}} and {{answer}}. */
   replyTemplate: string;
-  /** Max retries per comment before giving up. */
-  maxCommentRetries: number;
   /** Max retries for Figma API rate-limit (429) responses. */
   maxApiRetries: number;
 }
@@ -84,7 +82,6 @@ function validateConfigFile(raw: unknown): {
   ai_model: string;
   screenshot_scale: number;
   reply_template?: string;
-  max_comment_retries?: number;
   max_api_retries?: number;
   prompt?: { system?: string; user_template?: string };
 } {
@@ -128,13 +125,6 @@ function validateConfigFile(raw: unknown): {
   // context_files
   if (!Array.isArray(obj.context_files) || !obj.context_files.every((f) => typeof f === "string")) {
     throw new Error('config.json: "context_files" must be an array of strings');
-  }
-
-  // max_comment_retries (optional)
-  if (obj.max_comment_retries !== undefined) {
-    if (typeof obj.max_comment_retries !== "number" || obj.max_comment_retries < 0) {
-      throw new Error('config.json: "max_comment_retries" must be a non-negative number');
-    }
   }
 
   // max_api_retries (optional)
@@ -212,7 +202,6 @@ export function loadConfig(): Config {
     pollingIntervalMs: file.polling_interval_ms,
     triggerPrefix: file.trigger_prefix,
     screenshotScale: file.screenshot_scale,
-    maxCommentRetries: file.max_comment_retries ?? 3,
     maxApiRetries: file.max_api_retries ?? 3,
     replyTemplate: file.reply_template ?? DEFAULT_REPLY_TEMPLATE,
     prompt: {
